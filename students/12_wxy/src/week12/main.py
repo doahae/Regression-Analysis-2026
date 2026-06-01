@@ -9,38 +9,23 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from utils.metrics import rmse, mae
 from utils.models import CustomOLS
 
-# ====================== 全局绘图设置 ======================
 plt.rcParams['font.size'] = 12
 BASE_DIR = os.path.dirname(__file__)
 FIG_DIR = os.path.join(BASE_DIR, "results", "figures")
 os.makedirs(FIG_DIR, exist_ok=True)
 
-# ====================== 多项式特征构造（标准化，根治高次病态） ======================
 def polynomial_features(X, degree):
     X = X.reshape(-1, 1)
-    # 标准化，抑制高次幂数值爆炸
     X_scaled = (X - np.mean(X)) / np.std(X)
     features = [np.ones_like(X_scaled)]
     for d in range(1, degree + 1):
         features.append(X_scaled ** d)
     return np.hstack(features[1:])
 
-# ====================== 数据生成：正弦函数 + 二次趋势 ======================
 def generate_data(n_samples=150):
-    """
-    生成一维回归数据：正弦函数 + 二次趋势
-    
-    参数:
-        n_samples: 样本量（默认150，满足不少于100的要求）
-    """
     rng = np.random.RandomState(42)
-    # 有序x，范围0到10
     x = np.linspace(0, 10, n_samples).reshape(-1, 1)
-    
-    # 真实函数：正弦函数 + 二次趋势 sin(x) + 0.1*x^2
     y_true = (np.sin(x) + 0.1 * x**2).ravel()
-    
-    # 添加高斯随机噪声（均值0，标准差0.3）
     noise = rng.normal(0, 0.3, size=n_samples)
     y = y_true + noise
     
