@@ -9,23 +9,38 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from utils.metrics import rmse, mae
 from utils.models import CustomOLS
 
+# ====================== 全局绘图设置 ======================
 plt.rcParams['font.size'] = 12
 BASE_DIR = os.path.dirname(__file__)
 FIG_DIR = os.path.join(BASE_DIR, "results", "figures")
 os.makedirs(FIG_DIR, exist_ok=True)
 
+# ====================== 多项式特征构造（标准化，根治高次病态） ======================
 def polynomial_features(X, degree):
     X = X.reshape(-1, 1)
+    # 标准化，抑制高次幂数值爆炸
     X_scaled = (X - np.mean(X)) / np.std(X)
     features = [np.ones_like(X_scaled)]
     for d in range(1, degree + 1):
         features.append(X_scaled ** d)
     return np.hstack(features[1:])
 
+# ====================== 数据生成：正弦函数 + 二次趋势 ======================
 def generate_data(n_samples=150):
+    """
+    生成一维回归数据：正弦函数 + 二次趋势
+    
+    参数:
+        n_samples: 样本量（默认150，满足不少于100的要求）
+    """
     rng = np.random.RandomState(42)
+    # 有序x，范围0到10
     x = np.linspace(0, 10, n_samples).reshape(-1, 1)
-    y_true = (np.sin(x) + 0.3 * x).ravel()
+    
+    # 真实函数：正弦函数 + 二次趋势 sin(x) + 0.1*x^2
+    y_true = (np.sin(x) + 0.1 * x**2).ravel()
+    
+    # 添加高斯随机噪声（均值0，标准差0.3）
     noise = rng.normal(0, 0.3, size=n_samples)
     y = y_true + noise
     
@@ -39,7 +54,7 @@ def train_test_split(x, y, test_ratio=0.3):
     train_idx = indices[test_size:]
     return x[train_idx], x[test_idx], y[train_idx], y[test_idx]
 
-# ====================== Task A=====================
+# ====================== Task A：1/4/15阶候选模型对比 ======================
 def run_candidate_models():
     print("[1/5] 训练 1/4/15 阶多项式模型")
     x, y, y_true = generate_data()
@@ -52,9 +67,10 @@ def run_candidate_models():
     plt.figure(figsize=(12, 5))
     plt.scatter(x_train, y_train, c="tab:blue", alpha=0.5, label="Train")
     plt.scatter(x_test, y_test, c="tab:gray", alpha=0.5, label="Test")
-    plt.plot(x, y_true, "k--", lw=2.5, label="True Function: sin(x) + 0.3x")
+    plt.plot(x, y_true, "k--", lw=2.5, label="True Function: sin(x) + 0.1x²")
 
     results = []
+    # 排序x保证曲线连续平滑
     sort_idx = np.argsort(x.ravel())
     x_sorted = x[sort_idx]
     for d, c, lab in zip(degrees, colors, labels):
@@ -73,7 +89,7 @@ def run_candidate_models():
         plt.plot(x_sorted, y_curve, c=c, lw=2.5,
                  label=f"{lab} | Tr={tr_rmse:.2f} Te={te_rmse:.2f}")
 
-    plt.title("Candidate Models: Underfit / Optimal / Overfit\nTrue Function: sin(x) + 0.3x")
+    plt.title("Candidate Models: Underfit / Optimal / Overfit\nTrue Function: sin(x) + 0.1x²")
     plt.xlabel("x")
     plt.ylabel("y")
     plt.legend(fontsize=10)
@@ -82,7 +98,7 @@ def run_candidate_models():
     plt.close()
     return results
 
-# ====================== Task B======================
+# ====================== Task B：1~18阶误差曲线扫描 ======================
 def run_error_curve():
     print("[2/5] 扫描模型复杂度 1~18")
     x, y, y_true = generate_data()
@@ -104,7 +120,7 @@ def run_error_curve():
     plt.plot(degrees, te_list, "o-", label="Test RMSE")
     plt.xlabel("Degree (Complexity)")
     plt.ylabel("RMSE")
-    plt.title("Train vs Test Error Across Complexity\nTrue Function: sin(x) + 0.3x")
+    plt.title("Train vs Test Error Across Complexity\nTrue Function: sin(x) + 0.1x²")
     plt.legend()
     plt.grid(alpha=0.3)
     plt.tight_layout()
@@ -112,7 +128,7 @@ def run_error_curve():
     plt.close()
     return [(d, t, e, e-t) for d, t, e in zip(degrees, tr_list, te_list)]
 
-# ====================== Task C======================
+# ====================== Task C：方差可视化演示 ======================
 def run_variance_demo(n_repeat=10):
     print("[3/5] 方差可视化（多次抽样）")
     x, y, y_true = generate_data(n_samples=80)
@@ -126,7 +142,7 @@ def run_variance_demo(n_repeat=10):
     for i, (d, title) in enumerate(zip(degrees, ["Low Variance (Deg2)", "High Variance (Deg15)"])):
         plt.subplot(1, 2, i+1)
         plt.scatter(x, y, s=20, alpha=0.5, c="gray")
-        plt.plot(x_sorted, y_true[sort_idx], "k--", lw=2, label="True: sin(x)+0.3x")
+        plt.plot(x_sorted, y_true[sort_idx], "k--", lw=2, label="True: sin(x)+0.1x²")
         preds = []
 
         for _ in range(n_repeat):
@@ -145,13 +161,13 @@ def run_variance_demo(n_repeat=10):
         plt.title(f"{title}\nMean Std = {m_std:.3f}")
         plt.legend()
 
-    plt.suptitle("Variance Demo: Low vs High Complexity\nTrue Function: sin(x) + 0.3x")
+    plt.suptitle("Variance Demo: Low vs High Complexity\nTrue Function: sin(x) + 0.1x²")
     plt.tight_layout()
     plt.savefig(os.path.join(FIG_DIR, "variance_demo.png"), dpi=150)
     plt.close()
     return stds
 
-# ====================== Task D======================
+# ====================== Task D：RMSE与MAE异常值对比 ======================
 def run_loss_demo():
     print("[4/5] 异常值对 RMSE / MAE 影响")
     rng = np.random.RandomState(42)
@@ -195,7 +211,7 @@ def write_report(candidate, err_table, var_res, loss_res):
         f.write("# Week12 Bias-Variance 实验报告\n\n")
         f.write("## A1 数据生成说明\n")
         f.write("1. 样本总量150，满足不少于100的要求；\n")
-        f.write("2. 自定义非线性真实函数：**sin(x) + 0.3x**（正弦函数 + 线性趋势）；\n")
+        f.write("2. 自定义非线性真实函数：**sin(x) + 0.1x²**（正弦函数 + 二次趋势）；\n")
         f.write("3. 叠加均值0、标准差0.3的高斯随机噪声生成观测y；\n")
         f.write("4. 随机划分70%训练集、30%测试集。\n\n")
 
@@ -206,7 +222,7 @@ def write_report(candidate, err_table, var_res, loss_res):
         f.write(f"- Degree 15 模型：训练RMSE = {d15_tr:.2f}，测试RMSE = {d15_te:.2f}\n\n")
 
         f.write("### 回答问题\n")
-        f.write("- **Degree 1 最像欠拟合**，模型为一次直线，过于简单，无法拟合 sin(x) + 0.3x 的非线性趋势，整体偏差高。\n")
+        f.write("- **Degree 1 最像欠拟合**，模型为一次直线，过于简单，无法拟合 sin(x) + 0.1x² 的非线性趋势，整体偏差高。\n")
         f.write("- **Degree 15 最像过拟合**，模型复杂度极高，过度学习训练集噪声，训练误差偏低但测试误差大幅上升，方差极高。\n")
         f.write("- **选择 Degree 4 上线**，该模型拟合曲线贴近真实函数，偏差与方差权衡最优，泛化能力最强。\n\n")
 
@@ -260,7 +276,7 @@ def write_report(candidate, err_table, var_res, loss_res):
 def main():
     print("="*50)
     print(" Week12 偏差-方差可视化实验 ")
-    print(" 真实函数: sin(x) + 0.3x (正弦函数 + 线性趋势)")
+    print(" 真实函数: sin(x) + 0.1x² (正弦函数 + 二次趋势)")
     print("="*50)
 
     candidate = run_candidate_models()
